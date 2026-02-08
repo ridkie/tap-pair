@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tap The Pair PRO+</title>
+<style>
+body{
+    margin:0;
+    background:#111;
+    color:white;
+    font-family:Arial;
+    text-align:center;
+}
+h2{margin:10px}
+
+#info{font-size:14px;margin-bottom:6px}
+#bar{
+    width:90%;
+    height:8px;
+    background:#333;
+    margin:8px auto;
+    border-radius:10px;
+    overflow:hidden;
+}
+#barFill{
+    height:100%;
+    width:100%;
+    background:#00ff88;
+    transition:width 1s linear;
+}
+
+.grid{
+    display:grid;
+    gap:8px;
+    padding:10px;
+    max-width:520px;
+    margin:auto;
+}
+
+.card{
+    aspect-ratio:1/1;
+    border-radius:12px;
+    perspective:600px;
+}
+
+.inner{
+    width:100%;
+    height:100%;
+    border-radius:12px;
+    transform-style:preserve-3d;
+    transition:transform .4s;
+    background:#444;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:26px;
+}
+
+.card.open .inner{
+    transform:rotateY(180deg);
+    background:white;
+    color:black;
+}
+
+button{
+    margin:6px;
+    padding:6px 12px;
+    border:none;
+    border-radius:6px;
+}
+</style>
+</head>
+<body>
+
+<h2>Tap The Pair PRO+</h2>
+
+<div id="info">
+Level: <span id="level">1</span> |
+Salah: <span id="mistake">0</span> |
+Combo: <span id="combo">0</span>
+</div>
+
+<div id="bar"><div id="barFill"></div></div>
+
+<div id="grid" class="grid"></div>
+<button id="restart">Restart</button>
+<button id="nextBtn" style="display:none">Next Level</button>
+
+<script>
+const emojis=["🍎","🍌","🍓","🍇","🍒","🥝","🍍","🍉","🥥","🍑","🥕","🌽","🍆","🥔","🥦","🌶️","🍄","🥜"];
+
+const levels=[
+ {pairs:4, cols:2, limit:15, mistakes:4},
+ {pairs:8, cols:4, limit:30, mistakes:6},
+ {pairs:12, cols:4, limit:45, mistakes:8},
+ {pairs:18, cols:6, limit:65, mistakes:10}
+];
+
+let level=0, first=null, matches=0;
+let mistakeCount=0, combo=0;
+let remaining=0, timer=null;
+
+const grid=document.getElementById("grid");
+const levelEl=document.getElementById("level");
+const mistakeEl=document.getElementById("mistake");
+const comboEl=document.getElementById("combo");
+const nextBtn=document.getElementById("nextBtn");
+const restartBtn=document.getElementById("restart");
+const barFill=document.getElementById("barFill");
+
+function shuffle(a){return a.sort(()=>Math.random()-0.5);}
+
+function beep(freq){
+    const ctx=new AudioContext();
+    const o=ctx.createOscillator();
+    o.type="sine";
+    o.frequency.value=freq;
+    o.connect(ctx.destination);
+    o.start();
+    setTimeout(()=>{o.stop();ctx.close()},100);
+}
+
+function startLevel(){
+    clearInterval(timer);
+    grid.innerHTML="";
+    first=null; matches=0;
+    mistakeCount=0; combo=0;
+    nextBtn.style.display="none";
+
+    const cfg=levels[level];
+    levelEl.textContent=level+1;
+    mistakeEl.textContent=0;
+    comboEl.textContent=0;
+    grid.style.gridTemplateColumns=`repeat(${cfg.cols},1fr)`;
+
+    const chosen=shuffle(emojis).slice(0,cfg.pairs);
+    const cards=shuffle([...chosen,...chosen]);
+
+    cards.forEach(e=>{
+        const c=document.createElement("div");
+        c.className="card";
+        const inner=document.createElement("div");
+        inner.className="inner";
+        inner.dataset.emoji=e;
+        c.appendChild(inner);
+        c.onclick=()=>tapCard(c,inner);
+        grid.appendChild(c);
+    });
+
+    // preview
+    document.querySelectorAll(".inner").forEach(i=>{
+        i.textContent=i.dataset.emoji;
+        i.parentElement.classList.add("open");
+    });
+
+    setTimeout(()=>{
+        document.querySelectorAll(".inner").forEach(i=>{
+            i.textContent="";
+            i.parentElement.classList.remove("open");
+        });
+        startTimer(cfg.limit);
+    },3000);
+}
+
+function startTimer(limit){
+    remaining=limit;
+    barFill.style.width="100%";
+    timer=setInterval(()=>{
+        remaining--;
+        barFill.style.width=(remaining/limit*100)+"%";
+        if(remaining<=0){
+            clearInterval(timer);
+            alert("Waktu habis!");
+            startLevel();
+        }
+    },1000);
+}
+
+function tapCard(card,inner){
+    if(card.classList.contains("open")) return;
+
+    card.classList.add("open");
+    inner.textContent=inner.dataset.emoji;
+
+    if(!first){
+        first={card,inner};
+    }else{
+        if(first.inner.dataset.emoji===inner.dataset.emoji){
+            beep(700);
+            combo++;
+            comboEl.textContent=combo;
+            matches++;
+            first=null;
+
+            if(matches===levels[level].pairs){
+                clearInterval(timer);
+                nextBtn.style.display="inline-block";
+            }
+        }else{
+            beep(200);
+            combo=0;
+            comboEl.textContent=0;
+            mistakeCount++;
+            mistakeEl.textContent=mistakeCount;
+
+            setTimeout(()=>{
+                card.classList.remove("open");
+                inner.textContent="";
+                first.card.classList.remove("open");
+                first.inner.textContent="";
+                first=null;
+            },500);
+
+            if(mistakeCount>=levels[level].mistakes){
+                clearInterval(timer);
+                setTimeout(()=>{
+                    alert("Terlalu banyak salah!");
+                    startLevel();
+                },600);
+            }
+        }
+    }
+}
+
+nextBtn.onclick=()=>{
+    level++;
+    if(level>=levels.length) level=0;
+    startLevel();
+};
+
+restartBtn.onclick=startLevel;
+
+startLevel();
+</script>
+</body>
+</html>
